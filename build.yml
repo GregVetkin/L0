@@ -1,0 +1,67 @@
+services:
+
+    nats-streaming:
+        container_name: "nats-streaming-container"
+        image: 'nats-streaming:latest'
+        ports:
+            - "8222:8222"
+        restart: always
+
+
+    api:
+        container_name: "api-container"
+        build: 
+            context: ./
+            dockerfile: ./api/Dockerfile
+        entrypoint: /app/api/api-server
+        depends_on:
+            nats-streaming:
+                condition: service_started
+            postgres:
+                condition: service_healthy
+            
+        ports:
+            - "80:8080"
+
+    
+    worker:
+        container_name: "worker-container"
+        build: 
+            context: ./
+            dockerfile: ./worker/Dockerfile
+            
+        entrypoint: /app/worker/worker
+        depends_on:
+            nats-streaming:
+                condition: service_started
+            api:
+                condition: service_started
+            postgres:
+                condition: service_started
+
+        ports:
+            - "8181:8181"
+
+
+    postgres:
+        container_name: "pgdb-container"
+        image: postgres:13.3
+        environment:
+            POSTGRES_DB: "l0"
+            POSTGRES_USER: "l0user"
+            POSTGRES_PASSWORD: "l0pass"
+            PGDATA: "/var/lib/postgresql/data/pgdata"
+        volumes:
+            - ./db/init:/docker-entrypoint-initdb.d
+            - ./db/data:/var/lib/postgresql/data
+        ports:
+            - "5432:5432"
+        healthcheck:
+            test: ["CMD-SHELL", "pg_isready -U l0user -d l0"]
+            interval: 5s
+            timeout: 5s
+            retries: 5
+
+volumes:
+    data:
+      
